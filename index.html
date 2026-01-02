@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>FicChat Studio</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['ui-sans-serif','system-ui','-apple-system','Segoe UI','Roboto','Helvetica Neue','Arial','Noto Sans','PingFang SC','Hiragino Sans GB','Microsoft YaHei','sans-serif'],
+            },
+            colors: {
+              ios: {
+                blue: '#007AFF',
+                green: '#34C759',
+                gray: '#E5E5EA',
+                text: '#000000',
+                meta: '#8E8E93',
+                bg: '#F2F2F7'
+              }
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #f1f1f1; 
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #ccc; 
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #aaa; 
+      }
+      [contenteditable]:empty:before {
+        content: attr(placeholder);
+        color: #9ca3af;
+        cursor: text;
+      }
+
+      /* Mobile Landscape Block */
+      #rotate-notice {
+        display: none;
+      }
+      
+      @media only screen and (max-height: 500px) and (orientation: landscape) {
+        #rotate-notice {
+          display: flex;
+          position: fixed;
+          top: 0; left: 0; right: 0; bottom: 0;
+          background: #0f172a;
+          color: white;
+          z-index: 9999;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          text-align: center;
+          padding: 20px;
+        }
+        #root {
+          display: none;
+        }
+      }
+    </style>
+</head>
+  <body class="bg-slate-50 text-slate-900 h-screen overflow-hidden">
+    <div id="rotate-notice">
+      
+      <h2 class="text-xl font-bold mb-2">Please Rotate Your Device</h2>
+      <p class="text-sm text-gray-400">Use portrait mode for the best experience.</p>
+    </div>
+    <div id="root" class="h-full"></div>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html>
