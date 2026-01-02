@@ -60,9 +60,20 @@ function App() {
     const element = document.getElementById('phone-preview');
     if (!element) return;
 
+    // Wait for fonts to be ready (reduces baseline drift in html2canvas)
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const anyDoc = document as any;
+      if (anyDoc.fonts?.ready) {
+        await anyDoc.fonts.ready;
+      }
+    } catch {
+      // non-blocking
+    }
+
     // Capture current scroll position
-    const scrollArea = element.querySelector('#chat-scroll-area');
-    const currentScrollTop = scrollArea ? scrollArea.scrollTop : 0;
+    const scrollArea = element.querySelector('#chat-scroll-area') as HTMLElement | null;
+    const currentScrollTop = scrollArea ? Math.round(scrollArea.scrollTop) : 0;
 
     try {
       const canvas = await html2canvas(element, {
@@ -70,22 +81,25 @@ function App() {
         useCORS: true,
         backgroundColor: null,
         // Ensure we capture everything including the watermark
-        ignoreElements: (element: Element) => element.classList.contains('no-screenshot'),
+        ignoreElements: (el: Element) => el.classList.contains('no-screenshot'),
         onclone: (clonedDoc: any) => {
+          // Enable export-only CSS adjustments (index.html: html.screenshot-mode ...)
+          clonedDoc.documentElement.classList.add('screenshot-mode');
+
           const clonedScrollArea = clonedDoc.getElementById('chat-scroll-area');
           if (clonedScrollArea) {
             // Hide scrollbars for the screenshot
             clonedScrollArea.style.overflow = 'hidden';
-            
+
             // Manually shift content up to simulate scrolling
             // html2canvas often ignores scrollTop on inner elements, so we use transform
             if (currentScrollTop > 0) {
-               Array.from(clonedScrollArea.children).forEach((child: any) => {
-                   child.style.transform = `translateY(-${currentScrollTop}px)`;
-               });
+              Array.from(clonedScrollArea.children).forEach((child: any) => {
+                child.style.transform = `translateY(-${currentScrollTop}px)`;
+              });
             }
           }
-          
+
           // Remove border radius for square screenshot
           const clonedPhone = clonedDoc.getElementById('phone-preview');
           if (clonedPhone) {
@@ -93,7 +107,7 @@ function App() {
           }
         }
       });
-      
+
       const link = document.createElement('a');
       link.download = `chat-screenshot-${Date.now()}.png`;
       link.href = canvas.toDataURL('image/png');
@@ -108,9 +122,20 @@ function App() {
     const element = document.getElementById('phone-preview');
     if (!element) return;
 
+    // Wait for fonts to be ready (reduces baseline drift in html2canvas)
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const anyDoc = document as any;
+      if (anyDoc.fonts?.ready) {
+        await anyDoc.fonts.ready;
+      }
+    } catch {
+      // non-blocking
+    }
+
     // Create a clone to manipulate
     const clone = element.cloneNode(true) as HTMLElement;
-    
+
     // Position it off-screen but part of DOM so it renders
     clone.style.position = 'fixed';
     clone.style.top = '0';
@@ -119,23 +144,23 @@ function App() {
     clone.style.height = 'auto';
     clone.style.maxHeight = 'none';
     clone.style.overflow = 'visible';
-    clone.style.borderRadius = '0'; 
+    clone.style.borderRadius = '0';
 
     // Find internal scrollable areas and expand them
     // IDs were added in Preview.tsx
-    const wrapper = clone.querySelector('#chat-content-wrapper') as HTMLElement;
-    const scrollArea = clone.querySelector('#chat-scroll-area') as HTMLElement;
-    
+    const wrapper = clone.querySelector('#chat-content-wrapper') as HTMLElement | null;
+    const scrollArea = clone.querySelector('#chat-scroll-area') as HTMLElement | null;
+
     if (wrapper && scrollArea) {
-        // Expand wrapper
-        wrapper.style.height = 'auto';
-        wrapper.style.flex = 'none';
-        wrapper.style.overflow = 'visible';
-        
-        // Expand scroll area
-        scrollArea.style.height = 'auto';
-        scrollArea.style.overflow = 'visible';
-        scrollArea.style.flex = 'none';
+      // Expand wrapper
+      wrapper.style.height = 'auto';
+      wrapper.style.flex = 'none';
+      wrapper.style.overflow = 'visible';
+
+      // Expand scroll area
+      scrollArea.style.height = 'auto';
+      scrollArea.style.overflow = 'visible';
+      scrollArea.style.flex = 'none';
     }
 
     document.body.appendChild(clone);
@@ -149,9 +174,13 @@ function App() {
         useCORS: true,
         backgroundColor: null,
         windowHeight: clone.scrollHeight + 100, // Hint for canvas height
-        ignoreElements: (element: Element) => element.classList.contains('no-screenshot')
+        ignoreElements: (el: Element) => el.classList.contains('no-screenshot'),
+        onclone: (clonedDoc: any) => {
+          // Enable export-only CSS adjustments (index.html: html.screenshot-mode ...)
+          clonedDoc.documentElement.classList.add('screenshot-mode');
+        }
       });
-      
+
       const link = document.createElement('a');
       link.download = `ficchat-long-${Date.now()}.png`;
       link.href = canvas.toDataURL('image/png');
@@ -166,9 +195,9 @@ function App() {
 
   return (
     <div className="flex h-screen w-full md:flex-row overflow-hidden font-sans relative bg-slate-900 md:bg-transparent">
-      
+
       {/* Mobile Toggle FAB */}
-      <button 
+      <button
         onClick={() => setIsMobilePreview(!isMobilePreview)}
         className="md:hidden fixed bottom-6 right-6 z-50 h-14 w-14 rounded-full bg-indigo-600 text-white shadow-lg flex items-center justify-center hover:bg-indigo-700 transition-all active:scale-95 ring-2 ring-white/50"
         aria-label="Toggle View"
@@ -177,18 +206,12 @@ function App() {
       </button>
 
       {/* Left: Controls */}
-      {/* 
-        Mobile Behavior: 
-        - Absolute positioning to stack on top
-        - Uses transform to slide in/out based on state
-        - z-40 to be above preview
-      */}
       <div className={`
         absolute inset-0 z-40 bg-white w-full h-full transition-transform duration-300 ease-in-out
         md:relative md:w-[380px] lg:w-[420px] md:h-full md:translate-x-0 md:shadow-xl md:z-20
         ${isMobilePreview ? 'translate-x-full' : 'translate-x-0'}
       `}>
-        <ControlPanel 
+        <ControlPanel
           users={users}
           onAddUser={addUser}
           onUpdateUser={updateUser}
@@ -204,13 +227,8 @@ function App() {
       </div>
 
       {/* Right: Preview */}
-      {/* 
-        Mobile Behavior:
-        - Always full width/height behind the control panel
-        - Visible when ControlPanel slides away
-      */}
       <div className="flex-1 h-full relative bg-slate-200 w-full">
-        <Preview 
+        <Preview
           messages={messages}
           users={users}
           onDelete={deleteMessage}
