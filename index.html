@@ -96,7 +96,23 @@
       html.screenshot-mode #iphone-frame {
         transform: translateY(-1px);
       }
-    </style>
+    
+      /* Export-only: remove device frame/shadow and fix html2canvas text baseline drift */
+      html.screenshot-mode #phone-preview {
+        border: none !important;
+        box-shadow: none !important;
+        outline: none !important;
+        background: #ffffff !important;
+      }
+      /* Export-only: nudge text up slightly (tune -0.5px/-1px if needed) */
+      html.screenshot-mode #phone-preview .im-text,
+      html.screenshot-mode #phone-preview [contenteditable],
+      html.screenshot-mode #phone-preview p,
+      html.screenshot-mode #phone-preview span {
+        position: relative;
+        top: -1px;
+      }
+</style>
   </head>
 
   <body class="bg-slate-50 text-slate-900 h-screen overflow-hidden">

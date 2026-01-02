@@ -79,12 +79,22 @@ function App() {
       const canvas = await html2canvas(element, {
         scale: 2, // High resolution
         useCORS: true,
-        backgroundColor: null,
+        backgroundColor: '#ffffff',
+        foreignObjectRendering: true,
         // Ensure we capture everything including the watermark
         ignoreElements: (el: Element) => el.classList.contains('no-screenshot'),
         onclone: (clonedDoc: any) => {
           // Enable export-only CSS adjustments (index.html: html.screenshot-mode ...)
           clonedDoc.documentElement.classList.add('screenshot-mode');
+
+          const clonedPhone = clonedDoc.getElementById('phone-preview');
+          if (clonedPhone) {
+            clonedPhone.style.border = 'none';
+            clonedPhone.style.boxShadow = 'none';
+            clonedPhone.style.outline = 'none';
+            clonedPhone.style.borderRadius = '0';
+            clonedPhone.style.background = '#ffffff';
+          }
 
           const clonedScrollArea = clonedDoc.getElementById('chat-scroll-area');
           if (clonedScrollArea) {
@@ -98,12 +108,6 @@ function App() {
                 child.style.transform = `translateY(-${currentScrollTop}px)`;
               });
             }
-          }
-
-          // Remove border radius for square screenshot
-          const clonedPhone = clonedDoc.getElementById('phone-preview');
-          if (clonedPhone) {
-            clonedPhone.style.borderRadius = '0';
           }
         }
       });
@@ -145,6 +149,10 @@ function App() {
     clone.style.maxHeight = 'none';
     clone.style.overflow = 'visible';
     clone.style.borderRadius = '0';
+    clone.style.boxShadow = 'none';
+    clone.style.border = 'none';
+    clone.style.outline = 'none';
+    clone.style.background = '#ffffff';
 
     // Find internal scrollable areas and expand them
     // IDs were added in Preview.tsx
@@ -172,7 +180,8 @@ function App() {
       const canvas = await html2canvas(clone, {
         scale: 2,
         useCORS: true,
-        backgroundColor: null,
+        backgroundColor: '#ffffff',
+        foreignObjectRendering: true,
         windowHeight: clone.scrollHeight + 100, // Hint for canvas height
         ignoreElements: (el: Element) => el.classList.contains('no-screenshot'),
         onclone: (clonedDoc: any) => {
