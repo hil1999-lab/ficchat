@@ -9,14 +9,6 @@ import { Eye, Edit2 } from 'lucide-react';
 // Declaration for html2canvas attached to window via script tag
 declare const html2canvas: any;
 
-// --- Export tuning ---
-// The preview uses an iPhone-like frame with a thick border. For exports, we crop the inner screen area
-// instead of mutating CSS (mutating borders changes layout and can change line-wrapping).
-const FRAME_BORDER_PX = 8;
-// html2canvas sometimes renders text with a tiny baseline drift vs the live preview.
-// We capture 1px extra at the top (inside the frame) and then shift the bitmap up by 1px.
-const EXPORT_TEXT_NUDGE_PX = 1;
-
 function App() {
   const [users, setUsers] = useState<User[]>(INITIAL_USERS);
   const [messages, setMessages] = useState<Message[]>(INITIAL_MESSAGES);
@@ -64,11 +56,11 @@ function App() {
   }, []);
 
   // --- Screenshot ---
-  const handleScreenshot = async () => {
-    const element = document.getElementById('phone-preview');
-    if (!element) return;
+  const EXPORT_SCALE = 2;
+  // Nudge only during export to counter html2canvas baseline drift (Windows tends to render text slightly lower)
+  const EXPORT_TEXT_NUDGE_PX = 1;
 
-    // Wait for fonts to be ready (reduces baseline drift in html2canvas)
+  const waitForFonts = async () => {
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const anyDoc = document as any;
@@ -78,50 +70,102 @@ function App() {
     } catch {
       // non-blocking
     }
+  };
+
+  const getBorderCssPx = (el: HTMLElement) => {
+    const cs = window.getComputedStyle(el);
+    const bw = parseFloat(cs.borderLeftWidth || '0');
+    return Number.isFinite(bw) ? bw : 0;
+  };
+
+  const injectExportTextNudge = (clonedDoc: any) => {
+    const style = clonedDoc.createElement('style');
+    style.textContent = `
+      /* Export-only: lift text slightly to match on-screen preview */
+      #phone-preview span,
+      #phone-preview p,
+      #phone-preview h1,
+      #phone-preview h2,
+      #phone-preview h3,
+      #phone-preview div[contenteditable],
+      #phone-preview [contenteditable="true"] {
+        position: relative;
+        top: -${EXPORT_TEXT_NUDGE_PX}px;
+      }
+    `;
+    clonedDoc.head.appendChild(style);
+  };
+
+  const cropOutBorder = (src: HTMLCanvasElement, borderCssPx: number) => {
+    const borderPx = Math.round(borderCssPx * EXPORT_SCALE);
+    const out = document.createElement('canvas');
+    out.width = Math.max(1, src.width - borderPx * 2);
+    out.height = Math.max(1, src.height - borderPx * 2);
+    const ctx = out.getContext('2d');
+    if (!ctx) return src;
+
+    // Solid background avoids dark/black edge artifacts around transparency
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, out.width, out.height);
+
+    ctx.drawImage(
+      src,
+      borderPx,
+      borderPx,
+      out.width,
+      out.height,
+      0,
+      0,
+      out.width,
+      out.height
+    );
+
+    return out;
+  };
+
+  const downloadPng = (canvas: HTMLCanvasElement, filename: string) => {
+    const link = document.createElement('a');
+    link.download = filename;
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  };
+
+    const handleScreenshot = async () => {
+    const element = document.getElementById('phone-preview') as HTMLElement | null;
+    if (!element) return;
+
+    await waitForFonts();
 
     // Capture current scroll position
     const scrollArea = element.querySelector('#chat-scroll-area') as HTMLElement | null;
     const currentScrollTop = scrollArea ? Math.round(scrollArea.scrollTop) : 0;
 
+    // Read border width from the real element (so crop stays correct even if you tweak styling later)
+    const borderCssPx = getBorderCssPx(element);
+
     try {
-      const scale = 2;
-      const w = element.clientWidth;
-      const h = element.clientHeight;
-      const innerW = Math.max(1, w - FRAME_BORDER_PX * 2);
-      const innerH = Math.max(1, h - FRAME_BORDER_PX * 2);
-
-      // Crop out the iPhone frame (black border + shadow) while keeping the same inner layout.
-      // We capture 1px extra at the top and then shift the bitmap up by 1px to counter html2canvas baseline drift.
-      const cropX = FRAME_BORDER_PX;
-      const cropY = Math.max(0, FRAME_BORDER_PX - EXPORT_TEXT_NUDGE_PX);
-      const cropW = innerW;
-      const cropH = innerH + EXPORT_TEXT_NUDGE_PX;
-
-      const rawCanvas = await html2canvas(element, {
-        scale,
+      const canvas = await html2canvas(element, {
+        scale: EXPORT_SCALE,
         useCORS: true,
         backgroundColor: '#ffffff',
-        foreignObjectRendering: true,
-        x: cropX,
-        y: cropY,
-        width: cropW,
-        height: cropH,
         ignoreElements: (el: Element) => el.classList.contains('no-screenshot'),
         onclone: (clonedDoc: any) => {
+          // Apply export-only tweaks inside the cloned DOM used by html2canvas
           clonedDoc.documentElement.classList.add('screenshot-mode');
+          injectExportTextNudge(clonedDoc);
 
-          // Remove only visual effects that can bleed into edges (doesn't affect layout).
           const clonedPhone = clonedDoc.getElementById('phone-preview');
           if (clonedPhone) {
+            // Shadow sometimes produces a dark edge after rasterization
             clonedPhone.style.boxShadow = 'none';
-            clonedPhone.style.outline = 'none';
-            clonedPhone.style.borderRadius = '0';
-            clonedPhone.style.background = '#ffffff';
           }
 
           const clonedScrollArea = clonedDoc.getElementById('chat-scroll-area');
           if (clonedScrollArea) {
+            // Hide scrollbars for the screenshot
             clonedScrollArea.style.overflow = 'hidden';
+
+            // html2canvas can ignore inner scrollTop, so simulate by translating children
             if (currentScrollTop > 0) {
               Array.from(clonedScrollArea.children).forEach((child: any) => {
                 child.style.transform = `translateY(-${currentScrollTop}px)`;
@@ -131,135 +175,75 @@ function App() {
         }
       });
 
-      // Nudge bitmap up by 1px (scaled) without re-introducing any border.
-      const shift = EXPORT_TEXT_NUDGE_PX * scale;
-      const out = document.createElement('canvas');
-      out.width = rawCanvas.width;
-      out.height = Math.max(1, rawCanvas.height - shift);
-      const ctx = out.getContext('2d');
-      if (ctx) {
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, out.width, out.height);
-        ctx.drawImage(rawCanvas, 0, -shift);
-      }
-
-      const link = document.createElement('a');
-      link.download = `chat-screenshot-${Date.now()}.png`;
-      link.href = out.toDataURL('image/png');
-      link.click();
+      // Remove the device frame/border WITHOUT changing layout during render
+      const processed = cropOutBorder(canvas, borderCssPx);
+      downloadPng(processed, `chat-screenshot-${Date.now()}.png`);
     } catch (err) {
-      console.error("Screenshot failed:", err);
-      alert("Failed to capture screenshot.");
+      console.error('Screenshot failed:', err);
+      alert('Failed to capture screenshot.');
     }
   };
 
-  const handleLongScreenshot = async () => {
-    const element = document.getElementById('phone-preview');
+    const handleLongScreenshot = async () => {
+    const element = document.getElementById('phone-preview') as HTMLElement | null;
     if (!element) return;
 
-    // Wait for fonts to be ready (reduces baseline drift in html2canvas)
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const anyDoc = document as any;
-      if (anyDoc.fonts?.ready) {
-        await anyDoc.fonts.ready;
-      }
-    } catch {
-      // non-blocking
-    }
+    await waitForFonts();
 
-    // Create a clone to manipulate
+    // Create a clone to manipulate (long screenshot expands the scroll area)
     const clone = element.cloneNode(true) as HTMLElement;
 
-    // Position it off-screen but part of DOM so it renders
     clone.style.position = 'fixed';
     clone.style.top = '0';
     clone.style.left = '-10000px';
-    // Remove fixed height constraints on the main container
     clone.style.height = 'auto';
     clone.style.maxHeight = 'none';
     clone.style.overflow = 'visible';
-    // Keep border intact to preserve exact line-wrapping; we will crop it away during render.
-    clone.style.borderRadius = '0';
-    clone.style.boxShadow = 'none';
-    clone.style.outline = 'none';
-    clone.style.background = '#ffffff';
 
-    // Find internal scrollable areas and expand them
-    // IDs were added in Preview.tsx
+    document.body.appendChild(clone);
+
+    // Find internal scrollable areas and expand them (IDs set in Preview.tsx)
     const wrapper = clone.querySelector('#chat-content-wrapper') as HTMLElement | null;
     const scrollArea = clone.querySelector('#chat-scroll-area') as HTMLElement | null;
 
     if (wrapper && scrollArea) {
-      // Expand wrapper
       wrapper.style.height = 'auto';
       wrapper.style.flex = 'none';
       wrapper.style.overflow = 'visible';
 
-      // Expand scroll area
       scrollArea.style.height = 'auto';
       scrollArea.style.overflow = 'visible';
       scrollArea.style.flex = 'none';
     }
 
-    document.body.appendChild(clone);
+    // Border width for crop (same visual border as in preview)
+    const borderCssPx = getBorderCssPx(clone);
 
     try {
-      // Small delay to ensure rendering of the cloned element
       await new Promise(r => setTimeout(r, 100));
 
-      const scale = 2;
-      const w = clone.clientWidth;
-      const totalH = clone.scrollHeight;
-      const innerW = Math.max(1, w - FRAME_BORDER_PX * 2);
-      const innerH = Math.max(1, totalH - FRAME_BORDER_PX * 2);
-
-      const cropX = FRAME_BORDER_PX;
-      const cropY = Math.max(0, FRAME_BORDER_PX - EXPORT_TEXT_NUDGE_PX);
-      const cropW = innerW;
-      const cropH = innerH + EXPORT_TEXT_NUDGE_PX;
-
-      const rawCanvas = await html2canvas(clone, {
-        scale,
+      const canvas = await html2canvas(clone, {
+        scale: EXPORT_SCALE,
         useCORS: true,
         backgroundColor: '#ffffff',
-        foreignObjectRendering: true,
-        x: cropX,
-        y: cropY,
-        width: cropW,
-        height: cropH,
-        windowHeight: totalH + 200,
+        windowHeight: clone.scrollHeight + 100,
         ignoreElements: (el: Element) => el.classList.contains('no-screenshot'),
         onclone: (clonedDoc: any) => {
           clonedDoc.documentElement.classList.add('screenshot-mode');
+          injectExportTextNudge(clonedDoc);
+
           const clonedPhone = clonedDoc.getElementById('phone-preview');
           if (clonedPhone) {
             clonedPhone.style.boxShadow = 'none';
-            clonedPhone.style.outline = 'none';
-            clonedPhone.style.borderRadius = '0';
-            clonedPhone.style.background = '#ffffff';
           }
         }
       });
 
-      const shift = EXPORT_TEXT_NUDGE_PX * scale;
-      const out = document.createElement('canvas');
-      out.width = rawCanvas.width;
-      out.height = Math.max(1, rawCanvas.height - shift);
-      const ctx = out.getContext('2d');
-      if (ctx) {
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, out.width, out.height);
-        ctx.drawImage(rawCanvas, 0, -shift);
-      }
-
-      const link = document.createElement('a');
-      link.download = `ficchat-long-${Date.now()}.png`;
-      link.href = out.toDataURL('image/png');
-      link.click();
+      const processed = cropOutBorder(canvas, borderCssPx);
+      downloadPng(processed, `ficchat-long-${Date.now()}.png`);
     } catch (err) {
-      console.error("Long screenshot failed:", err);
-      alert("Failed to capture long screenshot.");
+      console.error('Long screenshot failed:', err);
+      alert('Failed to capture long screenshot.');
     } finally {
       document.body.removeChild(clone);
     }
