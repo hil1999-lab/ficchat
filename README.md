@@ -1,7 +1,7 @@
 # FicChat Studio
 
 A lightweight, client-side tool to compose fictional chat transcripts and export chat screenshots.
-
+website: https://hil1999-lab.github.io/ficchat/
 ## Key properties
 
 - Static, front-end only (no backend).
